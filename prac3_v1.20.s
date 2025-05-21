@@ -38,7 +38,7 @@ processor 18F45K22
     detected equ    0x37
     state    equ    0x38
     OFFSET_reg equ  0x39
-    COUNTER  equ    0x3C
+    COUNTER     equ 0x3A    
     // </editor-fold>
     
    ; ----------- Reset Vector ------------
@@ -217,7 +217,6 @@ State0:
     BCF	    PORTE,2
     BCF	    PORTE,1
     
-    ; Change in logic for program memory writing
     LFSR    0, 0x200
     MOVLW   0x00
     MOVWF   OFFSET_reg
@@ -1017,8 +1016,8 @@ SampleLoopG_B: ; Sample black with blue LED
     // </editor-fold>
     
     BCF	    next,0
-    
-;-------------- Write Calibration to Flash Memory------------------;
+   
+; -------------- WRITING TO FLASH MEMORY-------------;
 EraseBlock:
 
     ; Load TBLPTR
@@ -1082,6 +1081,7 @@ ProgramToMem:
 
     BSF GIE	    ; re-enable interrupts (INTCON)
     BCF EECON1, 2,0 ; bit WREN, disable write to memory
+
 
 ;--------------- Colour Detection --------------------
 // <editor-fold defaultstate="collapsed" desc="ColourDetectRed">
@@ -1191,7 +1191,7 @@ CALL	FlashLED
 BCF	next, 0
 MOVLW	0x01
 MOVWF	follow
-    
+
 ; Move the flash memory to data memory
 
 MOVLW	75 ; 3 numbers in first line + 3 numbers in second line

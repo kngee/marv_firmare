@@ -1108,7 +1108,7 @@ EraseBlock_Second:
 
 WriteToHoldingRegisters_2:	
     ; We are writing all the data from the calibration in 0x200...for 75 bytes to the holding register
-    MOVLW   
+    MOVLW   11 
     MOVWF   Count
 
     COPY_TO_HOLDING_2:
@@ -1255,22 +1255,17 @@ MOVWF	follow
 MOVLW	75 ; 3 numbers in first line + 3 numbers in second line
 MOVWF	Count,0
 
-; The table address consists of 3 bytes = 24 bits to address the 21 bit program
-; memory address space. We define the table to start at 100h in program
-; memory, so we need to set the table address to that location.
-				; Table starts at 0x100
 CLRF 	TBLPTRU,A 	; Upper byte of table address 00
-MOVLW 	0x01
+MOVLW 	0x40
 MOVWF 	TBLPTRH,A 	; High byte of table address 01
-MOVLW 	0x00
-MOVWF 	TBLPTRL,A	; Low byte of table address 00
+CLRF 	TBLPTRL,A	; Low byte of table address 00
 
 LFSR    0,0x200
 
 Loop_TBL_RETRIEVE:
     TBLRD*+	    
     MOVFF	TABLAT, POSTINC0	; Move content of TABLAT to W registe
-    DECFSZ	count,1,0
+    DECFSZ	Count,1,0
     GOTO 	Loop_TBL_RETRIEVE
 
 

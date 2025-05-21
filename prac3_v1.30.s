@@ -1115,7 +1115,7 @@ WriteToHoldingRegisters_2:
         MOVFF   POSTINC0, TABLAT
         TBLWT+*
         DECFSZ  Count
-        BRA     COPY_TO_HOLDING
+        BRA     COPY_TO_HOLDING_2
 	
     MOVLW	53 ; number of bytes left in block (64-5)
     MOVWF	COUNTER,1
@@ -1124,7 +1124,7 @@ WriteToHoldingRegisters_2:
 LoadRestOfHoldingRegs_2:
     TBLWT+*
     DECFSZ	COUNTER,1,0
-    BRA		LoadRestOfHoldingRegs
+    BRA		LoadRestOfHoldingRegs_2
 
 ProgramToMem_2:
     BSF EEPGD   ; point to Flash program memory (EECON1)
@@ -1291,16 +1291,15 @@ GOTO    CAP_TOUCH
 FOLLOW_BLUE:
     ; We are going to cycle between 1-4 colours;
     ; 1 - BLUE
-    ; 2 - BLACK
-    ; 3 - RED
-    ; 4 - GREEN
+    ; 2 - RED
+    ; 3 - GREED
     
     ; SET THE SSD, SET THE TARGET AND CROSS COLOUR REGS ASWELL
     
     ; FOLLOW 1 = BLUE
     MOVLW   0x01
     CPFSEQ  follow
-    GOTO    FOLLOW_BLACK
+    GOTO    FOLLOW_RED
     CLRF    POS_reg
     CLRF    INDIRECT_reg
     
@@ -1556,14 +1555,13 @@ RESOLUTION_BLUE:
 FOLLOW_RED:
     ; We are going to cycle between 1-4 colours;
     ; 1 - BLUE
-    ; 2 - BLACK
-    ; 3 - RED
-    ; 4 - GREEN
+    ; 2 - RED
+    ; 3 - GREEN
     
     ; SET THE SSD, SET THE TARGET AND CROSS COLOUR REGS ASWELL
     
     ; FOLLOW 3 = RED
-    MOVLW   0x03
+    MOVLW   0x02
     CPFSEQ  follow
     GOTO    FOLLOW_GREEN
     
@@ -1812,14 +1810,13 @@ RESOLUTION_RED:
 FOLLOW_GREEN:
     ; We are going to cycle between 1-4 colours;
     ; 1 - BLUE
-    ; 2 - BLACK
-    ; 3 - RED
-    ; 4 - GREEN
+    ; 2 - RED
+    ; 3 - GREEN
     
     ; SET THE SSD, SET THE TARGET AND CROSS COLOUR REGS ASWELL
     
     ; FOLLOW 1 = BLUE
-    MOVLW   0x04
+    MOVLW   0x03
     CPFSEQ  follow
     GOTO    CAP_TOUCH
     
@@ -2067,67 +2064,25 @@ RESOLUTION_GREEN:
     
     GOTO    SEARCH ; FALLBACK IF WE CAN'T REACH THE OTHER STATES
     
-STOP_F:
-    BTFSC   next, 1
-    GOTO    STOP_MOTORS
-    
 SEARCH:
-    BTFSC   next, 1
-    GOTO    SEARCH_MOTORS
-    
-STRAIGHT:
-    BTFSC   next, 1
-    GOTO    STRAIGHT_MOTORS
-    
-MID_LEFT:
-    BTFSC   next, 1
-    GOTO    SLIGHT_LEFT
-    
-MID_RIGHT:
-    BTFSC   next, 1
-    GOTO    SLIGHT_RIGHT
-    
-OUT_LEFT:
-    BTFSC   next, 1
-    GOTO    STRONG_LEFT
-    
-OUT_RIGHT:
-    BTFSC   next, 1
-    GOTO    STRONG_RIGHT
-
-SEARCH_MOTORS:
-   
-    
     
     CLRF    PORTD
     BSF	    PORTD,0
     
     BTFSC   prev_mov,0
-    GOTO    STRAIGHT_MOTORS
+    GOTO    STRAIGHT
     BTFSC   prev_mov,1
-    GOTO    SLIGHT_RIGHT
+    GOTO    MID_RIGHT
     BTFSC   prev_mov,2
-    GOTO    STRONG_RIGHT
+    GOTO    OUT_RIGHT
     BTFSC   prev_mov,3
-    GOTO    SLIGHT_LEFT
+    GOTO    MID_LEFT
     BTFSC   prev_mov,4
-    GOTO    STRONG_LEFT
-    
-    MOVLB   0xF
-    
-    MOVLW   80
-    MOVWF   CCPR1L
-    MOVLW   0
-    MOVWF   CCPR3L
-    MOVWF   CCPR4L
-    MOVLW   60
-    MOVWF   CCPR2L
-    
-    MOVLB   0x0
+    GOTO    OUT_LEFT
     
     GOTO    LLI
 
-STOP_MOTORS:
+STOP_F:
     CLRF    PORTD
     BSF	    PORTD,7
     
@@ -2143,7 +2098,7 @@ STOP_MOTORS:
     
     GOTO    CAP_TOUCH
 
-STRONG_LEFT:
+OUT_LEFT:
     CLRF    prev_mov
     BSF	    prev_mov,2
     CLRF    PORTD
@@ -2164,7 +2119,7 @@ STRONG_LEFT:
     
     GOTO    LLI
 
-STRAIGHT_MOTORS:
+STRAIGHT:
     
     CLRF    prev_mov
     BSF	    prev_mov,0
@@ -2189,7 +2144,7 @@ STRAIGHT_MOTORS:
     ; 2 = Right forward
     ; 3 = right reverse
     ; 4 = left reverse
-SLIGHT_LEFT:
+MID_LEFT:
     CLRF    prev_mov
     BSF	    prev_mov,1
     CLRF    PORTD
@@ -2208,7 +2163,7 @@ SLIGHT_LEFT:
     MOVLB   0x0
     GOTO    LLI
 
-SLIGHT_RIGHT:
+MID_RIGHT:
     CLRF    prev_mov
     BSF	    prev_mov,3
     CLRF    PORTD
@@ -2227,7 +2182,7 @@ SLIGHT_RIGHT:
     MOVLB   0x0
     GOTO    LLI
 
-STRONG_RIGHT:
+OUT_RIGHT:
     CLRF    prev_mov
     BSF	    prev_mov,4
     CLRF    PORTD
@@ -2699,27 +2654,22 @@ CALIBRATIONROUT:
     
 RACEROUT:    
     MOVF    PORTB
-    MOVLW   4
+    MOVLW   3
     CPFSLT  follow ; If not following green skip, else make 0
     SUBWF   follow
     MOVLW   1
     ADDWF   follow
     
     ;CHANGE SSD to represent the following
-     ;1 - BLUE
-    ; 2 - BLACK
-    ; 3 - RED
-    ; 4 - GREEN
+    ; 1 - BLUE
+    ; 2 - RED
+    ; 3 - GREEN
     
     MOVLW 0x01
     CPFSGT follow
     BRA	   makeB
     
     MOVLW   0x02
-    CPFSGT  follow
-    BRA	    makeK
-    
-    MOVLW   0x03
     CPFSGT  follow
     BRA	    makeR
     
@@ -2728,10 +2678,6 @@ RACEROUT:
     
     makeB:
     CALL  OnBlue
-    RETFIE
-    
-    makeK:
-    CALL  OnBlack
     RETFIE
     
     makeR:

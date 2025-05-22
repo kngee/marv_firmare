@@ -1,5 +1,3 @@
-; OPTIMIZATION ON LLI: Use the prev move to check only the relevant colors
-
 processor 18F45K22
     
     // <editor-fold defaultstate="collapsed" desc="Bit Configuration"> 
@@ -41,6 +39,8 @@ processor 18F45K22
     state    equ    0x38
     OFFSET_reg equ  0x39
     prev_mov	equ 0x40
+    in_search	equ 0x41
+	
     // </editor-fold>
     
    ; ----------- Reset Vector ------------
@@ -52,9 +52,9 @@ processor 18F45K22
    ;------------- Interrupt Vector --------------
     org	0x08
     BTFSC   INT0IF
-    GOTO    ISR_next ;goto interrupt service routine
+    GOTO    ISR_change ;goto interrupt service routine
     BTFSC   INT1IF
-    GOTO    ISR_change
+    GOTO    ISR_next
     RETFIE
    
 ;Use PORTA for sensor input
@@ -205,6 +205,7 @@ State0:
     ; Begin Calibration, start with White, start with Red, Green, Blue
     ;; SET STATE BIT
     BSF	    next,2
+    BSF	    GIE
     
     MOVLW   16
     MOVWF   SampleNum
@@ -228,8 +229,25 @@ State0:
     MOVLW   0x00
     MOVWF   OFFSET_reg
     
+    ; Clean DATA MEMORY
+    MOVLW   75
+    MOVWF   Count
+    
+    CLEAN_MEM:
+    MOVLW   0x00
+    MOVWF   POSTINC0
+    DECFSZ  Count
+    GOTO    CLEAN_MEM
+    
+    LFSR    0,0x200
+    
     ; Press when ready to start calibrating
     BTFSS   next,0  ; When button is pressed change colours and move on
+    BRA	    $-2
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
     BRA	    $-2
     ; 7 = red
     ; 6 = green
@@ -286,6 +304,11 @@ SampleLoopW_R: ;
     MOVLW   0x05
     MOVWF   SensorNum
     
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
 SampleLoopW_G: ; Sample values for Blue LED on white
     CALL    Delay_loop
     BSF	    GO
@@ -332,6 +355,11 @@ SampleLoopW_G: ; Sample values for Blue LED on white
     MOVWF   SampleNum
     MOVLW   0x05
     MOVWF   SensorNum
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
 
 SampleLoopW_B: ; Sample values for Blue LED on white
     CALL    Delay_loop
@@ -395,6 +423,12 @@ SampleLoopW_B: ; Sample values for Blue LED on white
     BCF	    next,0
     BTFSS   next,0  ; When button is pressed change colours and move on
     BRA	    $-2
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
 // </editor-fold>
     
 // <editor-fold defaultstate="collapsed" desc="RedSample">
@@ -414,7 +448,7 @@ SampleLoopR_R:
     
     CALL    Averaging
     
-    MOVLW   5 ; Subtract for threshold then store in relevant register
+    MOVLW   15 ; Subtract for threshold then store in relevant register
     SUBWF   SUML,1
     MOVF    OFFSET_reg, 0
     MOVFF   SUML, PLUSW0
@@ -445,6 +479,11 @@ SampleLoopR_R:
     BCF	    PORTC,5 
     BSF	    PORTE,2; set LED to Green
     BCF	    PORTE,1
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
     
 SampleLoopR_G:
     CALL    Delay_loop
@@ -492,6 +531,11 @@ SampleLoopR_G:
     BCF	    PORTC,5 
     BCF	    PORTE,2
     BSF	    PORTE,1; Set LED to blue
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
     
 SampleLoopR_B:
     CALL    Delay_loop
@@ -543,6 +587,7 @@ SampleLoopR_B:
     MOVLW   0x03
     MOVWF   Count
     Call    FlashLED
+    
     BCF	    PORTD,7
     BSF	    PORTD,6
     BSF	    PORTD,5
@@ -550,14 +595,21 @@ SampleLoopR_B:
     BSF	    PORTD,3
     BSF	    PORTD,2
     BCF	    PORTD,0
-   
+    
     BCF	    next,0
     BTFSS   next,0  ; When button is pressed change colours and move on
+    BRA	    $-2
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
     BRA	    $-2
 // </editor-fold>
     
 // <editor-fold defaultstate="collapsed" desc="BlackSamples">
 SampleLoopK_R: ; Sample black with red LED
+    BSF	    GIE
+    
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -605,6 +657,11 @@ SampleLoopK_R: ; Sample black with red LED
     BSF	    PORTE,2; Set LED to Green
     BCF	    PORTE,1
     
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
 SampleLoopK_G: ; Sample black with green LED
     CALL    Delay_loop
     BSF	    GO
@@ -651,8 +708,14 @@ SampleLoopK_G: ; Sample black with green LED
     BCF	    PORTC,5
     BCF	    PORTE,2
     BSF	    PORTE,1; Set LED to Blue  
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
 
 SampleLoopK_B: ; Sample black with blue LED
+    BSF	    GIE
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -714,10 +777,18 @@ SampleLoopK_B: ; Sample black with blue LED
     BCF	    next,0
     BTFSS   next,0  ; When button is pressed change colours and move on
     BRA	    $-2
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
     // </editor-fold>
     
 // <editor-fold defaultstate="collapsed" desc="BlueSamples">
 SampleLoopB_R: ; Sample black with blue LED
+    BSF	    GIE
+    
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -764,7 +835,13 @@ SampleLoopB_R: ; Sample black with blue LED
     BSF	    PORTE,2; Set LED to Green
     BCF	    PORTE,1    
     
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
 SampleLoopB_G: ; Sample black with blue LED
+    BSF	    GIE
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -811,7 +888,13 @@ SampleLoopB_G: ; Sample black with blue LED
     BCF	    PORTE,2
     BSF	    PORTE,1
     
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
 SampleLoopB_B: ; Sample black with blue LED
+    BSF	    GIE
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -873,10 +956,17 @@ SampleLoopB_B: ; Sample black with blue LED
     BCF	    next,0
     BTFSS   next,0  ; When button is pressed change colours and move on
     BRA	    $-2
+    
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
     // </editor-fold>
     
 // <editor-fold defaultstate="collapsed" desc="GreenSamples">
 SampleLoopG_R: ; Sample black with blue LED
+    BSF	    GIE
+    
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -923,7 +1013,14 @@ SampleLoopG_R: ; Sample black with blue LED
     MOVLW   0x05
     MOVWF   SensorNum
     
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
 SampleLoopG_G: ; Sample black with blue LED
+    BSF	    GIE
+    
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -970,7 +1067,14 @@ SampleLoopG_G: ; Sample black with blue LED
     MOVLW   0x05
     MOVWF   SensorNum
     
+    CALL    Delay_loop
+    BSF	    GO
+    BTFSC   GO
+    BRA	    $-2
+    
 SampleLoopG_B: ; Sample black with blue LED
+    BSF	    GIE
+    
     CALL    Delay_loop
     BSF	    GO
     BTFSC   GO
@@ -1016,13 +1120,9 @@ SampleLoopG_B: ; Sample black with blue LED
     MOVWF   Count
     Call    FlashLED
     
-    BCF	    next,0
-    BTFSS   next,0  ; When button is pressed move to colour detection
-    BRA	    $-2
     // </editor-fold>
     
     BCF	    next,0
-    GOTO    $
 
 ; -------------- WRITING TO FLASH MEMORY-------------;
 EraseBlock:
@@ -1109,7 +1209,7 @@ EraseBlock_Second:
 
 WriteToHoldingRegisters_2:	
     ; We are writing all the data from the calibration in 0x200...for 75 bytes to the holding register
-    MOVLW   11 
+    MOVLW   11
     MOVWF   Count
 
     COPY_TO_HOLDING_2:
@@ -1142,6 +1242,10 @@ ProgramToMem_2:
 
     BSF GIE	    ; re-enable interrupts (INTCON)
     BCF EECON1, 2,0 ; bit WREN, disable write to memory
+    
+    CALL    Delay_loop
+    
+    GOTO    CALIBRATION_RETRIEVAL
 
 ;;--------------- Colour Detection --------------------
 ;// <editor-fold defaultstate="collapsed" desc="ColourDetectRed">
@@ -1240,6 +1344,43 @@ OnBlack:
     
 // </editor-fold>
     
+CALIBRATION_RETRIEVAL:
+    MOVLW   75
+    MOVWF   Count
+    LFSR    0,0x200
+    
+    CLEAN_MEM_2:
+    MOVLW   0x00
+    MOVWF   POSTINC0
+    DECFSZ  Count
+    GOTO    CLEAN_MEM_2
+    
+    LFSR    0,0x200
+    
+    ; Move the flash memory to data memory
+
+MOVLW	75 ; 3 numbers in first line + 3 numbers in second line
+MOVWF	Count,0
+
+; The table address consists of 3 bytes = 24 bits to address the 21 bit program
+; memory address space. We define the table to start at 100h in program
+; memory, so we need to set the table address to that location.
+				; Table starts at 0x100
+CLRF 	TBLPTRU,A 	; Upper byte of table address 00
+MOVLW 	0x40
+MOVWF 	TBLPTRH,A 	; High byte of table address 01
+MOVLW 	0x00
+MOVWF 	TBLPTRL,A	; Low byte of table address 00
+
+LFSR    0,0x200
+
+Loop_TBL_RETRIEVE:
+    TBLRD*+	    
+    MOVFF	TABLAT, POSTINC0	; Move content of TABLAT to W registe
+    DECFSZ	Count,1,0
+    GOTO 	Loop_TBL_RETRIEVE
+    
+GOTO	LLI_SETUP
 ; ---------- LLI ------------ 
 // <editor-fold defaultstate="collapsed" desc="LLI">
 LLI_SETUP:
@@ -1250,28 +1391,12 @@ CALL	FlashLED
 BCF	next, 0
 MOVLW	0x01
 MOVWF	follow
-CLRF    prev_mov
-BSF     prev_mov,0; Set the prev move to straight
+    
 
-; Move the flash memory to data memory
-
-MOVLW	75 ; 3 numbers in first line + 3 numbers in second line
-MOVWF	Count,0
-
-CLRF 	TBLPTRU,A 	; Upper byte of table address 00
-MOVLW 	0x40
-MOVWF 	TBLPTRH,A 	; High byte of table address 01
-CLRF 	TBLPTRL,A	; Low byte of table address 00
-
-LFSR    0,0x200
-
-Loop_TBL_RETRIEVE:
-    TBLRD*+	    
-    MOVFF	TABLAT, POSTINC0	; Move content of TABLAT to W registe
-    DECFSZ	Count,1,0
-    GOTO 	Loop_TBL_RETRIEVE
-
-
+BSF	GIE
+CLRF	prev_mov
+GOTO	CAP_TOUCH
+    
 LLI:
 ; Clear the color registers
 CLRF    GREEN_reg
@@ -1281,9 +1406,7 @@ CLRF    BLACK_reg
 CLRF    BLUE_reg
 CLRF    CALC_reg
 CLRF	CROSS_reg
-
-BTFSS	next,1
-GOTO    CAP_TOUCH
+CLRF	in_search
 
 ; The follow register will store the color that we are interested in following
 FOLLOW_BLUE:
@@ -1300,16 +1423,9 @@ FOLLOW_BLUE:
     GOTO    FOLLOW_RED
     CLRF    POS_reg
     CLRF    INDIRECT_reg
-
-; Step 1, check the 3 relevant sensors - only make a decision if you are looking at blue
-; Step 2, Since you have no made a decision, include the 2 other sensors
-; Step 3, evaluate the 5 as you would normally
-
+    
 MM_BLUE:
-    ; Check if this is a relevant sensor given the previous move
-    ; The middle sensor will always be used
-
-    ; This is the middle sensor for the blue color
+    ; This is the middle sensor for the red color
     CLRF    CALC_reg
     MOVLW   00000001B
     MOVWF   ADCON0
@@ -1358,11 +1474,8 @@ MM_BLUE:
     BSF     CROSS_reg, 2
     BSF	    BLACK_reg, 2    
 
-    BRANCH_LOGIC_MM_BLUE:
-
-
 LM_BLUE:
-    ; We want to strobe the led and compare to determine if it is white
+        ; We want to strobe the led and compare to determine if it is white
     CLRF    CALC_reg
     MOVLW   00000101B
     MOVWF   ADCON0
@@ -1546,16 +1659,16 @@ RESOLUTION_BLUE:
     GOTO    SEARCH
     
     ; Check each sensor sequentially for a color to follow because we know a sensor is seeing a non white color that isn't blue
-;    BTFSC   CROSS_reg, 2
-;    GOTO    STRAIGHT
-;    BTFSC   CROSS_reg, 1
-;    GOTO    MID_RIGHT
-;    BTFSC   CROSS_reg, 3
-;    GOTO    MID_LEFT
-;    BTFSC   CROSS_reg, 4
-;    GOTO    OUT_LEFT
-;    BTFSC   CROSS_reg, 0
-;    GOTO    OUT_RIGHT
+    BTFSC   CROSS_reg, 2
+    GOTO    STRAIGHT
+    BTFSC   CROSS_reg, 1
+    GOTO    MID_RIGHT
+    BTFSC   CROSS_reg, 3
+    GOTO    MID_LEFT
+    BTFSC   CROSS_reg, 4
+    GOTO    OUT_LEFT
+    BTFSC   CROSS_reg, 0
+    GOTO    OUT_RIGHT
     
     GOTO    SEARCH ; FALLBACK IF WE CAN'T REACH THE OTHER STATES
      
@@ -1576,14 +1689,6 @@ FOLLOW_RED:
     CLRF    POS_reg
     CLRF    INDIRECT_reg
     
-    BSF	    PORTD, 7
-    BSF	    PORTD, 6
-    BSF	    PORTD, 5
-    BCF	    PORTD, 4
-    BSF	    PORTD, 3
-    BSF	    PORTD, 2
-    BSF	    PORTD, 0
-    
 MM_RED:
     ; This is the middle sensor for the red color
     CLRF    CALC_reg
@@ -1594,7 +1699,7 @@ MM_RED:
     MOVWF   POS_reg
     
     ; We want to strobe the led and compare to determine if it is white
-    CALL    TEST_WHITE
+    CALL    TEST_WHITE_RED
     
     ; Check the result in the calc register - IF IT IS WHITE THEN WE MUST SET THE WHITE REGISTER AND MOVE ON TO THE NEXT SENSOR
     BTFSC   CALC_reg, 0
@@ -1634,7 +1739,7 @@ LM_RED:
     MOVLW   0x01
     MOVWF   POS_reg
     
-    CALL    TEST_WHITE
+    CALL    TEST_WHITE_RED
     
     ; Check the result in the calc register - IF IT IS WHITE THEN WE MUST SET THE WHITE REGISTER AND MOVE ON TO THE NEXT SENSOR
     BTFSC   CALC_reg, 0
@@ -1674,7 +1779,7 @@ RM_RED:
     MOVLW   0x02
     MOVWF   POS_reg
     
-    CALL    TEST_WHITE
+    CALL    TEST_WHITE_RED
     
     ; Check the result in the calc register - IF IT IS WHITE THEN WE MUST SET THE WHITE REGISTER AND MOVE ON TO THE NEXT SENSOR
     BTFSC   CALC_reg, 0
@@ -1714,7 +1819,7 @@ LL_RED:
     MOVLW   0x03
     MOVWF   POS_reg
     
-    CALL    TEST_WHITE
+    CALL    TEST_WHITE_RED
     
     ; Check the result in the calc register - IF IT IS WHITE THEN WE MUST SET THE WHITE REGISTER AND MOVE ON TO THE NEXT SENSOR
     BTFSC   CALC_reg, 0
@@ -1754,7 +1859,7 @@ RR_RED:
     MOVLW   0x04
     MOVWF   POS_reg
     
-    CALL    TEST_WHITE
+    CALL    TEST_WHITE_RED
     
     ; Check the result in the calc register - IF IT IS WHITE THEN WE MUST SET THE WHITE REGISTER AND MOVE ON TO THE NEXT SENSOR
     BTFSC   CALC_reg, 0
@@ -1801,16 +1906,16 @@ RESOLUTION_RED:
     GOTO    SEARCH
     
     ; Check each sensor sequentially for a color to follow because we know a sensor is seeing a non white color that isn't red
-;    BTFSC   CROSS_reg, 2
-;    GOTO    STRAIGHT
-;    BTFSC   CROSS_reg, 1
-;    GOTO    MID_RIGHT
-;    BTFSC   CROSS_reg, 3
-;    GOTO    MID_LEFT
-;    BTFSC   CROSS_reg, 4
-;    GOTO    OUT_LEFT
-;    BTFSC   CROSS_reg, 0
-;    GOTO    OUT_RIGHT
+    BTFSC   CROSS_reg, 2
+    GOTO    STRAIGHT
+    BTFSC   CROSS_reg, 1
+    GOTO    MID_RIGHT
+    BTFSC   CROSS_reg, 3
+    GOTO    MID_LEFT
+    BTFSC   CROSS_reg, 4
+    GOTO    OUT_LEFT
+    BTFSC   CROSS_reg, 0
+    GOTO    OUT_RIGHT
     
     GOTO    SEARCH ; FALLBACK IF WE CAN'T REACH THE OTHER STATES
     
@@ -1829,15 +1934,7 @@ FOLLOW_GREEN:
     GOTO    CAP_TOUCH
     
     CLRF    POS_reg
-    CLRF    INDIRECT_reg
-    
-    BSF	    PORTD, 7
-    BCF	    PORTD, 6
-    BSF	    PORTD, 5
-    BSF	    PORTD, 4
-    BSF	    PORTD, 3
-    BSF	    PORTD, 2
-    BSF	    PORTD, 0
+    CLRF    INDIRECT_reg   
     
 MM_GREEN:
     ; This is the middle sensor for the red color
@@ -2077,15 +2174,17 @@ SEARCH:
     CLRF    PORTD
     BSF	    PORTD,0
     
-    BTFSC   prev_mov,0
+    BSF	    in_search,0
+    
+    BTFSC   prev_mov,0 ; STRAIGHT
     GOTO    STRAIGHT
-    BTFSC   prev_mov,1
-    GOTO    MID_RIGHT
-    BTFSC   prev_mov,2
-    GOTO    OUT_RIGHT
-    BTFSC   prev_mov,3
+    BTFSC   prev_mov,1 ; MIDLEFT
     GOTO    MID_LEFT
-    BTFSC   prev_mov,4
+    BTFSC   prev_mov,2 ; OUTLEFT
+    GOTO    OUT_RIGHT
+    BTFSC   prev_mov,3 ; MIDRIGHT
+    GOTO    MID_RIGHT
+    BTFSC   prev_mov,4 ; OUTRIGHT
     GOTO    OUT_LEFT
     
     GOTO    LLI
@@ -2107,6 +2206,9 @@ STOP_F:
     GOTO    CAP_TOUCH
 
 OUT_LEFT:
+    BTFSC   prev_mov, 2
+    GOTO    HANDLE_OL
+    
     CLRF    prev_mov
     BSF	    prev_mov,2
     CLRF    PORTD
@@ -2125,9 +2227,24 @@ OUT_LEFT:
     
     MOVLB   0x0
     
+    HANDLE_OL:
+    
+    BTFSS   in_search,0
+    GOTO    LLI
+    
+    MOVLW   5
+    MOVWF   Count
+    
+    CALL    Delay_loop
+    DECFSZ  Count
+    BRA	    $-4
+    
     GOTO    LLI
 
 STRAIGHT:
+    
+    BTFSC   prev_mov, 0
+    GOTO    HANDLE_STR
     
     CLRF    prev_mov
     BSF	    prev_mov,0
@@ -2136,15 +2253,27 @@ STRAIGHT:
     
     MOVLB   0xF
     
-    MOVLW   90 ; Left motor
+    MOVLW   95 ; Left motor
     MOVWF   CCPR1L
     MOVLW   0
     MOVWF   CCPR3L
     MOVWF   CCPR4L
-    MOVLW   70 ; Right motor
+    MOVLW   67 ; Right motor
     MOVWF   CCPR2L
     
     MOVLB   0x0
+    
+    HANDLE_STR:
+    
+    BTFSS   in_search,0
+    GOTO    LLI
+    
+    MOVLW   255
+    MOVWF   Count
+    
+    CALL    Delay_loop
+    DECFSZ  Count
+    BRA	    $-4
     
     GOTO    LLI
 
@@ -2153,6 +2282,9 @@ STRAIGHT:
     ; 3 = right reverse
     ; 4 = left reverse
 MID_LEFT:
+    BTFSC   prev_mov, 1
+    GOTO    HANDLE_ML
+    
     CLRF    prev_mov
     BSF	    prev_mov,1
     CLRF    PORTD
@@ -2169,9 +2301,24 @@ MID_LEFT:
     MOVWF   CCPR4L
     
     MOVLB   0x0
+    
+    HANDLE_ML:
+    BTFSS   in_search,0
+    GOTO    LLI
+    
+    MOVLW   255
+    MOVWF   Count
+    
+    CALL    Delay_loop
+    DECFSZ  Count
+    BRA	    $-4
+    
     GOTO    LLI
 
 MID_RIGHT:
+    BTFSC   prev_mov,3
+    GOTO    HANDLE_MR
+    
     CLRF    prev_mov
     BSF	    prev_mov,3
     CLRF    PORTD
@@ -2188,9 +2335,24 @@ MID_RIGHT:
     MOVWF   CCPR3L
     
     MOVLB   0x0
+    
+    HANDLE_MR:
+    BTFSS   in_search,0
+    GOTO    LLI
+    
+    MOVLW   255
+    MOVWF   Count
+    
+    CALL    Delay_loop
+    DECFSZ  Count
+    BRA	    $-4
+    
     GOTO    LLI
 
 OUT_RIGHT:
+    BTFSC   prev_mov,4
+    GOTO    HANDLE_OR
+    
     CLRF    prev_mov
     BSF	    prev_mov,4
     CLRF    PORTD
@@ -2208,6 +2370,19 @@ OUT_RIGHT:
     MOVWF   CCPR3L
     
     MOVLB   0x0
+    
+    HANDLE_OR:
+    
+    BTFSS   in_search,0
+    GOTO    LLI
+    
+    MOVLW   255
+    MOVWF   Count
+    
+    CALL    Delay_loop
+    DECFSZ  Count
+    BRA	    $-4
+    
     GOTO    LLI
     
     
@@ -2217,15 +2392,54 @@ CAP_TOUCH:
     
     BCF	    next,2
     BCF	    next,0
+    BSF	    GIE
     
-;    BSF	    PORTD, 7 ; a
-;    BCF	    PORTD, 6 ; b
-;    BCF	    PORTD, 5 ; c
-;    BSF	    PORTD, 4 ; d
-;    BSF	    PORTD, 3 ; e
-;    BSF	    PORTD, 2 ; f
-;    BCF	    PORTD, 0 ; g
-;    
+Shine_blue:
+	MOVLW   1
+	CPFSEQ  follow
+	GOTO    Shine_red
+    
+	BSF	    PORTD, 7
+	BSF	    PORTD, 6
+	BSF	    PORTD, 5
+	BSF	    PORTD, 4
+	BSF	    PORTD, 3
+	BSF	    PORTD, 2
+	BSF	    PORTD, 0
+	
+	GOTO	CAP_start
+	
+    Shine_red:
+	
+	MOVLW   2
+	CPFSEQ  follow
+	GOTO    Shine_green
+
+	BSF	    PORTD, 7
+	BSF	    PORTD, 6
+	BSF	    PORTD, 5
+	BCF	    PORTD, 4
+	BSF	    PORTD, 3
+	BSF	    PORTD, 2
+	BSF	    PORTD, 0
+	
+	GOTO	CAP_start
+	
+    Shine_green:
+	
+	MOVLW   3
+	CPFSEQ  follow
+
+	BSF	    PORTD, 7
+	BCF	    PORTD, 6
+	BSF	    PORTD, 5
+	BSF	    PORTD, 4
+	BSF	    PORTD, 3
+	BSF	    PORTD, 2
+	BSF	    PORTD, 0
+	
+    CAP_start:
+    
     BCF	    ANSELB,3
     BCF	    TRISB,3
 
@@ -2272,7 +2486,7 @@ BCF	    PORTE,2
 BCF	    PORTE,1
 
 ; Perform ADC and see if it pulls high
-MOVLW   2
+MOVLW   4
 MOVWF   SampleNum
 CLRF    SUML
 CLRF    SUMH
@@ -2321,7 +2535,7 @@ TEST_GREEN:
     BCF	    PORTE,1
     
     ; Perform ADC and see if it pulls high
-    MOVLW   2
+    MOVLW   4
     MOVWF   SampleNum
     CLRF    SUML
     CLRF    SUMH
@@ -2370,7 +2584,7 @@ TEST_BLUE:
     BSF	    PORTE,1 ; SET LED to BLUE
      
     ; Perform ADC and see if it pulls high
-    MOVLW   2
+    MOVLW   4
     MOVWF   SampleNum
     CLRF    SUML
     CLRF    SUMH
@@ -2419,7 +2633,7 @@ TEST_BLACK:
      
     ; Perform ADC and see if it pulls high
     Call    Delay_loop
-    MOVLW   2
+    MOVLW   4
     MOVWF   SampleNum
     CLRF    SUML
     CLRF    SUMH
@@ -2459,19 +2673,69 @@ TEST_BLACK:
     
     RETURN
     
-TEST_WHITE:
-    BSF	    PORTC,5 ; Set LED to red
-    BCF	    PORTE,2
+TEST_WHITE_RED:
+    BSF	    PORTC,5
+    BCF	    PORTE,2 
     BCF	    PORTE,1
     
     ; Perform ADC and see if it pulls high
-    MOVLW   2
+    MOVLW   4
+    MOVWF   SampleNum
+    CLRF    SUML
+    CLRF    SUMH
+    
+    LOOP_RED_LLI:
+        Call    Delay_loop
+	BSF	GO ; Poll till the ADC conversion is done
+	BTFSC   GO
+	BRA	$-2
+
+	MOVF   ADRESH,W
+	ADDWF   SUML,1 ; Store result from ADC in SUML
+	BTFSC   STATUS,0
+	INCF    SUMH,1 ; If has a carry over, increment the SUMH register
+
+	DECFSZ  SampleNum
+	GOTO    LOOP_RED_LLI
+    
+    CALL    Averaging_short
+    ; Shift the LFSR to the correct sensor
+    LFSR	0, 0x200
+    MOVFF	POS_reg, INDIRECT_reg
+    
+    Shift_Ind_RW:
+	MOVLW	0x00
+	CPFSEQ	INDIRECT_reg
+	MOVF	POSTINC0, 0, 0
+	MOVLW	0x00
+	CPFSEQ	INDIRECT_reg
+	DECFSZ	INDIRECT_reg
+	MOVLW	0x00
+	CPFSEQ	INDIRECT_reg
+	GOTO	Shift_Ind_RW
+
+    MOVF    SUML,W
+    
+    CPFSLT  INDF0
+    RETURN
+    
+    BSF	    CALC_reg, 0
+    RETURN
+    
+TEST_WHITE:
+    
+    BCF	    PORTC,5
+    BSF	    PORTE,2 ; Set LED to Green
+    BCF	    PORTE,1
+    
+    ; Perform ADC and see if it pulls high
+    MOVLW   4
     MOVWF   SampleNum
     CLRF    SUML
     CLRF    SUMH
     
     LOOP_GREEN_LLI:
-    Call    Delay_loop
+        Call    Delay_loop
 	BSF	GO ; Poll till the ADC conversion is done
 	BTFSC   GO
 	BRA	$-2
@@ -2510,7 +2774,7 @@ TEST_WHITE:
     BSF	    PORTE,1 ; Set LED to blue
     
     ; Perform ADC and see if it pulls high
-    MOVLW   2
+    MOVLW   4
     MOVWF   SampleNum
     CLRF    SUML
     CLRF    SUMH
@@ -2568,7 +2832,7 @@ AverageStart:
     RETURN
     
 Averaging_short:
-    MOVLW   0x1
+    MOVLW   0x2
     MOVWF   SampleNum
 AverageStart_s:
     RRCF   SUMH,1
@@ -2609,7 +2873,7 @@ Delay_loop: ; Delay for flashing LED in Calibration Sequence
     MOVLW	0x01
     MOVWF	DELAY2		
 Go1:					
-    MOVLW	0x50
+    MOVLW	0x60
     MOVWF	DELAY1
 Go2:	
     DECFSZ	DELAY1,f	
@@ -2642,7 +2906,7 @@ ISR_next:
     BCF	    INT0IF  ; clear RB0 interrupt flag
     
     BTFSC   next,2 ; check if in captouch
-    GOTO    CAP_TOUCH ; if not, move on to captouch
+    GOTO    CALIBRATION_RETRIEVAL ; if not, move on to captouch
     GOTO    State0
     
     RETFIE
@@ -2650,7 +2914,7 @@ ISR_next:
 ISR_change:
     BCF	    INT0IF
     BCF     INT1IF
-   
+    
     BTFSC   next,2 
     BRA	    CALIBRATIONROUT
     BRA	    RACEROUT

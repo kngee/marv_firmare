@@ -237,6 +237,7 @@ State0:
     MOVLW   0x00
     MOVWF   POSTINC0
     DECFSZ  Count
+
     GOTO    CLEAN_MEM
     
     LFSR    0,0x200
@@ -514,6 +515,18 @@ SampleLoopR_G:
     MOVWF   SampleNum
     
     INCF    OFFSET_reg
+
+    ; TURN OFF THE LEDS AND WAIT FOR RECONFIG
+    BCF     PORTC,5
+    BCF     PORTE,2
+    BCF     PORTE,1
+
+    BCF	    next,0
+    BTFSS   next,0  ; When button is pressed change channel and move on
+    BRA	    $-2
+
+    BSF     PORTE,2
+
     CALL    ChangeADChannel
     DECFSZ  SensorNum
     GOTO    SampleLoopR_G
@@ -566,6 +579,18 @@ SampleLoopR_B:
     MOVWF   SampleNum
     
     INCF    OFFSET_reg
+
+    ; TURN OFF THE LEDS AND WAIT FOR RECONFIG
+    BCF     PORTC,5
+    BCF     PORTE,2
+    BCF     PORTE,1
+
+    BCF	    next,0
+    BTFSS   next,0  ; When button is pressed change channel and move on
+    BRA	    $-2
+
+    BSF     PORTE,1
+
     CALL    ChangeADChannel
     DECFSZ  SensorNum
     GOTO    SampleLoopR_B

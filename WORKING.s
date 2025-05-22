@@ -1429,63 +1429,11 @@ BCF	next, 0
 MOVLW	0x01
 MOVWF	follow
     
+
 BSF	GIE
 CLRF	prev_mov
 GOTO	CAP_TOUCH
-
-CONFIG_SETPOINTS:
-; Based on the followed color, we want to move the setpoint value into a sequence of 5 BYTES
-; We are just copying a block of colors from the calibrated values to a fixed place in data memory - or what we can do isjust point towards where we know these values are and since they are fixed, we know what order to process them in
-
-MOVLW   0x01
-CPFSEQ  follow
-GOTO    SETPOINT_RED
-
-LFSR    0,0x22D
-LFSR    1,0x500
-MOVLW   15
-
-MOVWF   Count
-
-COPY_SETBLUE:
-MOVFF   POSTINC0,POSTINC1
-DECFSZ  Count
-GOTO    COPY_SETBLUE
-
-GOTO    LLI
-
-SETPOINT_RED:
-MOVLW   0x02
-CPFSEQ  follow
-GOTO    SETPOINT_GREEN
-
-; Set the values for red
-LFSR   0,0x20F
-LFSR    1,0x500
-MOVLW   15
-
-MOVWF   Count
-
-COPY_SETRED:
-MOVFF   POSTINC0,POSTINC1
-DECFSZ  Count
-GOTO    COPY_SETRED
-
-GOTO    LLI
-
-SETPOINT_GREEN:
-; Set the values for green
-MOVLW   0,0x23C
-LFSR    1,0x500
-MOVLW   15
-
-MOVWF   Count
-
-COPY_SETGREEN:
-MOVWF   POSTINC0, POSTINC1
-DECFSZ  Count
-GOTO    COPY_SETGREEN
-
+    
 LLI:
 ; Clear the color registers
 CLRF    GREEN_reg
@@ -1497,19 +1445,7 @@ CLRF    CALC_reg
 CLRF	CROSS_reg
 CLRF	in_search
 
-; LOGIC FOR THE PROPORITONAL CONTROL
-;   1. WE NEED TO CHOOSE OUR SETPOINTS FOR EACH SENSOR BASED ON THE COLOR
-;   2. RESET THE ERRORS
-;   3. 2 BYTE SUMS FOR EACH ERROR AND THEN BUILD UP FOR EACH SIDE OF THE SENSOR
-;   4. FIND THE DIFFERENCE BETWEEN THE ERRORS ON BOTH SIDES 
-;   5. UPDATE THE MOTOR SPEEDS
-
-; We can strobe on each color for each sensor, and get the error but then we can do a test black to see if it fails and if so we can have a resolution at the end that stops us if conditions for black are met
-
-; Your follow register is only important to determine our setpoints, this whole process is otherwise generalized
-
-STROBE_RED:
-
+; The follow register will store the color that we are interested in following
 FOLLOW_BLUE:
     ; We are going to cycle between 1-4 colours;
     ; 1 - BLUE
@@ -1542,10 +1478,7 @@ MM_BLUE:
     BSF	    WHITE_reg, 2
     BTFSC   CALC_reg, 0
     GOTO    LM_BLUE
-    
-    MOVLW   0x00
-    MOVWF   POS_reg
-    
+
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
@@ -1562,9 +1495,6 @@ MM_BLUE:
     BSF	    CROSS_reg, 2
     BTFSC   CALC_reg, 2
     GOTO    LM_BLUE
-    
-    MOVLW   0x00
-    MOVWF   POS_reg
     
     ; Test for the other colours
     CALL    TEST_BLUE
@@ -1601,8 +1531,6 @@ LM_BLUE:
     GOTO    RM_BLUE
     
     ; Test for the other colours
-    MOVLW   0x01
-    MOVWF   POS_reg
     CALL    TEST_GREEN
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 3
@@ -1636,30 +1564,27 @@ RM_BLUE:
     BTFSC   CALC_reg, 0
     GOTO    LL_BLUE
     
-    ; Test the sensor for a color and store the result in the register
-    MOVLW   0x02
-    MOVWF   POS_reg 
-    CALL    TEST_RED 
-    BTFSC   CALC_reg, 1
-    BSF	    CROSS_reg, 1
-    BTFSC   CALC_reg, 1
-    GOTO    LL_BLUE
-    
-    ; Test for the other colours
-    MOVLW   0x02
-    MOVWF   POS_reg
-    CALL    TEST_GREEN
-    BTFSC   CALC_reg, 2
-    BSF	    CROSS_reg, 1
-    BTFSC   CALC_reg, 2
-    GOTO    LL_BLUE
-    
     ; Test for the other colours
     MOVLW   0x02
     MOVWF   POS_reg
     CALL    TEST_BLUE
     BTFSC   CALC_reg, 3
     GOTO    MID_RIGHT
+    
+    ; Test the sensor for a color and store the result in the register
+    MOVLW   0x02
+    MOVWF   POS_reg
+    CALL    TEST_RED
+    BTFSC   CALC_reg, 1
+    BSF	    CROSS_reg, 1
+    BTFSC   CALC_reg, 1
+    GOTO    LL_BLUE
+    
+    CALL    TEST_GREEN
+    BTFSC   CALC_reg, 2
+    BSF	    CROSS_reg, 1
+    BTFSC   CALC_reg, 2
+    GOTO    LL_BLUE
     
     ; Test for the other colours
     BSF     CROSS_reg, 1
@@ -1699,6 +1624,7 @@ LL_BLUE:
     CALL    TEST_BLUE
     BTFSC   CALC_reg, 3
     GOTO    OUT_LEFT
+    
     
     ; Test for the other colours
     BSF     CROSS_reg, 4
@@ -2318,12 +2244,12 @@ OUT_LEFT:
     
     MOVLB   0xF
     
-    MOVLW   60
+    MOVLW   110
     MOVWF   CCPR2L
     MOVLW   0
     MOVWF   CCPR3L
     MOVWF   CCPR1L
-    MOVLW   80
+    MOVLW   130
     MOVWF   CCPR4L
     
     MOVLB   0x0
@@ -2354,12 +2280,12 @@ STRAIGHT:
     
     MOVLB   0xF
     
-    MOVLW   95 ; Left motor
+    MOVLW   147 ; Left motor
     MOVWF   CCPR1L
     MOVLW   0
     MOVWF   CCPR3L
     MOVWF   CCPR4L
-    MOVLW   67 ; Right motor
+    MOVLW   127 ; Right motor
     MOVWF   CCPR2L
     
     MOVLB   0x0
@@ -2393,7 +2319,7 @@ MID_LEFT:
     
     MOVLB   0xF
     
-    MOVLW   60 
+    MOVLW   110
     MOVWF   CCPR2L
     MOVLW   0
     MOVWF   CCPR3L
@@ -2427,7 +2353,7 @@ MID_RIGHT:
     
     MOVLB   0xF
     
-    MOVLW   80
+    MOVLW   130
     MOVWF   CCPR1L
     MOVLW   0
     MOVWF   CCPR2L
@@ -2462,12 +2388,12 @@ OUT_RIGHT:
     
     MOVLB   0xF
     
-    MOVLW   80
+    MOVLW   130
     MOVWF   CCPR1L
     MOVLW   0
     MOVWF   CCPR4L
     MOVWF   CCPR2L
-    MOVLW   60
+    MOVLW   110
     MOVWF   CCPR3L
     
     MOVLB   0x0

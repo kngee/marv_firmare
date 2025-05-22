@@ -196,6 +196,9 @@ Setup:
     BCF	    ANSELD,1
     BCF	    TRISD,1
     
+;    MOVLW   0x01
+;    MOVWF   prev_mov
+;   
     MOVLB   0x0
     
     // </editor-fold>
@@ -1429,63 +1432,12 @@ BCF	next, 0
 MOVLW	0x01
 MOVWF	follow
     
+
 BSF	GIE
-CLRF	prev_mov
+;movlw	0X01
+;movwf	prev_mov
 GOTO	CAP_TOUCH
-
-CONFIG_SETPOINTS:
-; Based on the followed color, we want to move the setpoint value into a sequence of 5 BYTES
-; We are just copying a block of colors from the calibrated values to a fixed place in data memory - or what we can do isjust point towards where we know these values are and since they are fixed, we know what order to process them in
-
-MOVLW   0x01
-CPFSEQ  follow
-GOTO    SETPOINT_RED
-
-LFSR    0,0x22D
-LFSR    1,0x500
-MOVLW   15
-
-MOVWF   Count
-
-COPY_SETBLUE:
-MOVFF   POSTINC0,POSTINC1
-DECFSZ  Count
-GOTO    COPY_SETBLUE
-
-GOTO    LLI
-
-SETPOINT_RED:
-MOVLW   0x02
-CPFSEQ  follow
-GOTO    SETPOINT_GREEN
-
-; Set the values for red
-LFSR   0,0x20F
-LFSR    1,0x500
-MOVLW   15
-
-MOVWF   Count
-
-COPY_SETRED:
-MOVFF   POSTINC0,POSTINC1
-DECFSZ  Count
-GOTO    COPY_SETRED
-
-GOTO    LLI
-
-SETPOINT_GREEN:
-; Set the values for green
-MOVLW   0,0x23C
-LFSR    1,0x500
-MOVLW   15
-
-MOVWF   Count
-
-COPY_SETGREEN:
-MOVWF   POSTINC0, POSTINC1
-DECFSZ  Count
-GOTO    COPY_SETGREEN
-
+    
 LLI:
 ; Clear the color registers
 CLRF    GREEN_reg
@@ -1497,20 +1449,9 @@ CLRF    CALC_reg
 CLRF	CROSS_reg
 CLRF	in_search
 
-; LOGIC FOR THE PROPORITONAL CONTROL
-;   1. WE NEED TO CHOOSE OUR SETPOINTS FOR EACH SENSOR BASED ON THE COLOR
-;   2. RESET THE ERRORS
-;   3. 2 BYTE SUMS FOR EACH ERROR AND THEN BUILD UP FOR EACH SIDE OF THE SENSOR
-;   4. FIND THE DIFFERENCE BETWEEN THE ERRORS ON BOTH SIDES 
-;   5. UPDATE THE MOTOR SPEEDS
-
-; We can strobe on each color for each sensor, and get the error but then we can do a test black to see if it fails and if so we can have a resolution at the end that stops us if conditions for black are met
-
-; Your follow register is only important to determine our setpoints, this whole process is otherwise generalized
-
-STROBE_RED:
-
+; The follow register will store the color that we are interested in following
 FOLLOW_BLUE:
+   
     ; We are going to cycle between 1-4 colours;
     ; 1 - BLUE
     ; 2 - RED
@@ -1524,6 +1465,39 @@ FOLLOW_BLUE:
     GOTO    FOLLOW_RED
     CLRF    POS_reg
     CLRF    INDIRECT_reg
+    
+    
+    ; LOGIC TO DETERMINE WHICH SENSORS TO CHECK
+    
+    ;ALWAYS MIDDLE
+    CALL    MM_BLUE
+    
+    ;STRAIGHT CASE
+    BTFSC   prev_mov,0
+    GOTO    case1B
+    
+    ;LEFT CASES
+    MOVLW   8
+    CPFSLT  prev_mov
+    GOTO    case2B
+    ;RIGHT CASES
+    GOTO    case3B
+    
+case1B:
+    CALL   LM_BLUE
+    CALL   RM_BLUE
+    GOTO   RESOLUTION_BLUE
+
+case2B:
+    CALL   LM_BLUE
+    CALL   LL_BLUE
+    GOTO   RESOLUTION_BLUE
+    
+case3B:
+    CALL   RM_BLUE
+    CALL   RR_BLUE
+    GOTO   RESOLUTION_BLUE
+    
     
 MM_BLUE:
     ; This is the middle sensor for the red color
@@ -1541,7 +1515,7 @@ MM_BLUE:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 2
     BTFSC   CALC_reg, 0
-    GOTO    LM_BLUE
+    RETURN
     
     MOVLW   0x00
     MOVWF   POS_reg
@@ -1551,7 +1525,7 @@ MM_BLUE:
     BTFSC   CALC_reg, 1
     BSF     CROSS_reg, 2
     BTFSC   CALC_reg, 1
-    GOTO    LM_BLUE
+    RETURN
     
     MOVLW   0x00
     MOVWF   POS_reg
@@ -1561,7 +1535,7 @@ MM_BLUE:
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 2
     BTFSC   CALC_reg, 2
-    GOTO    LM_BLUE
+    RETURN
     
     MOVLW   0x00
     MOVWF   POS_reg
@@ -1574,7 +1548,9 @@ MM_BLUE:
     ; Test for the other colours
     BSF     CROSS_reg, 2
     BSF	    BLACK_reg, 2    
-
+    
+    RETURN
+    
 LM_BLUE:
         ; We want to strobe the led and compare to determine if it is white
     CLRF    CALC_reg
@@ -1589,25 +1565,21 @@ LM_BLUE:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 3
     BTFSC   CALC_reg, 0
-    GOTO    RM_BLUE
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
-    MOVLW   0x01
-    MOVWF   POS_reg
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF	    CROSS_reg, 3
     BTFSC   CALC_reg, 1
-    GOTO    RM_BLUE
+    RETURN
     
     ; Test for the other colours
-    MOVLW   0x01
-    MOVWF   POS_reg
     CALL    TEST_GREEN
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 3
     BTFSC   CALC_reg, 2
-    GOTO    RM_BLUE
+    RETURN
     
     ; Test for the other colours
     MOVLW   0x01
@@ -1619,7 +1591,8 @@ LM_BLUE:
         ; Test for the other colours
     BSF     CROSS_reg, 3
     BSF	    BLACK_reg, 3  
-
+    RETURN
+    
 RM_BLUE:
             ; We want to strobe the led and compare to determine if it is white
     CLRF    CALC_reg
@@ -1634,16 +1607,16 @@ RM_BLUE:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 1
     BTFSC   CALC_reg, 0
-    GOTO    LL_BLUE
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     MOVLW   0x02
-    MOVWF   POS_reg 
-    CALL    TEST_RED 
+    MOVWF   POS_reg
+    CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF	    CROSS_reg, 1
     BTFSC   CALC_reg, 1
-    GOTO    LL_BLUE
+    RETURN
     
     ; Test for the other colours
     MOVLW   0x02
@@ -1652,7 +1625,7 @@ RM_BLUE:
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 1
     BTFSC   CALC_reg, 2
-    GOTO    LL_BLUE
+    RETURN
     
     ; Test for the other colours
     MOVLW   0x02
@@ -1664,6 +1637,8 @@ RM_BLUE:
     ; Test for the other colours
     BSF     CROSS_reg, 1
     BSF	    BLACK_reg, 1 
+    
+    RETURN
     
 LL_BLUE:
     ;We want to strobe the led and compare to determine if it is white
@@ -1679,21 +1654,21 @@ LL_BLUE:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 4
     BTFSC   CALC_reg, 0
-    GOTO    RR_BLUE
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF     CROSS_reg, 4
     BTFSC   CALC_reg, 1
-    GOTO    RR_BLUE
+    RETURN
     
     ; Test for the other colours
     CALL    TEST_GREEN
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 4
     BTFSC   CALC_reg, 2
-    GOTO    RR_BLUE
+    RETURN
     
     ; Test for the other colours
     CALL    TEST_BLUE
@@ -1703,7 +1678,9 @@ LL_BLUE:
     ; Test for the other colours
     BSF     CROSS_reg, 4
     BSF	    BLACK_reg, 4
-
+    
+    RETURN
+    
 RR_BLUE:
         ;We want to strobe the led and compare to determine if it is white
     CLRF    CALC_reg
@@ -1719,21 +1696,21 @@ RR_BLUE:
     BSF	    WHITE_reg, 0
     
     BTFSC   CALC_reg, 0
-    GOTO    RESOLUTION_BLUE
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF	    CROSS_reg, 0
     BTFSC   CALC_reg, 1
-    GOTO    RESOLUTION_BLUE
+    RETURN
     
     ; Test for the other colours
     CALL    TEST_GREEN
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 0
     BTFSC   CALC_reg, 2
-    GOTO    RESOLUTION_BLUE
+    RETURN
     
     ; Test for the other colours
     CALL    TEST_BLUE
@@ -1743,10 +1720,33 @@ RR_BLUE:
         ; Test for the other colours
     BSF     CROSS_reg, 0
     BSF	    BLACK_reg, 0
+    RETURN
     
 RESOLUTION_BLUE:
-    ; At this point we know that we have not seen the target color - RED
+ 
+    BTFSC   prev_mov,0
+    GOTO    case1_1B
+    MOVLW   8
+    CPFSLT  prev_mov
+    GOTO    case2_1B
+    GOTO    case3_1B
     
+case1_1B:
+    CALL    RR_BLUE
+    CALL    LL_BLUE
+    GOTO    startresB
+
+case2_1B:
+    CALL    RM_BLUE
+    CALL    RR_BLUE
+    GOTO    startresB
+    
+case3_1B:
+    CALL    LL_BLUE
+    CALL    LM_BLUE
+    GOTO    startresB
+    
+startresB:    
     ; Check if all black to stop
     MOVLW   31
     SUBWF   BLACK_reg, 0
@@ -1775,6 +1775,10 @@ RESOLUTION_BLUE:
      
 ; The follow register will store the color that we are interested in following
 FOLLOW_RED:
+    
+    ; LOGIC TO DETERMINE WHICH SENSORS TO CHECK
+    
+    
     ; We are going to cycle between 1-4 colours;
     ; 1 - BLUE
     ; 2 - RED
@@ -1789,6 +1793,36 @@ FOLLOW_RED:
     
     CLRF    POS_reg
     CLRF    INDIRECT_reg
+    
+    ;ALWAYS MIDDLE
+    CALL    MM_RED
+    
+    ;STRAIGHT CASE
+    BTFSC   prev_mov,0
+    GOTO    case1R
+    
+    ;LEFT CASES
+    MOVLW   8
+    CPFSLT  prev_mov
+    GOTO    case2R
+    ;RIGHT CASES
+    GOTO    case3R
+    
+case1R:
+    CALL   LM_RED
+    CALL   RM_RED
+    GOTO   RESOLUTION_RED
+
+case2R:
+    CALL   LM_RED
+    CALL   LL_RED
+    GOTO   RESOLUTION_RED
+    
+case3R:
+    CALL   RM_RED
+    CALL   RR_RED
+    GOTO   RESOLUTION_RED
+    
     
 MM_RED:
     ; This is the middle sensor for the red color
@@ -1806,7 +1840,7 @@ MM_RED:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 2
     BTFSC   CALC_reg, 0
-    GOTO    LM_RED
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
@@ -1818,19 +1852,21 @@ MM_RED:
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 2
     BTFSC   CALC_reg, 2
-    GOTO    LM_RED
+    RETURN
 
     ; Test for the other colours
     CALL    TEST_BLUE
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 2
     BTFSC   CALC_reg, 3
-    GOTO    LM_RED
+    RETURN
     
     ; Test for the other colours
     BSF     CROSS_reg, 2
     BSF	    BLACK_reg, 2    
-
+    
+    RETURN
+    
 LM_RED:
         ; We want to strobe the led and compare to determine if it is white
     CLRF    CALC_reg
@@ -1846,8 +1882,7 @@ LM_RED:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 3
     BTFSC   CALC_reg, 0
-    GOTO    RM_RED
-    
+    RETURN    
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
@@ -1858,19 +1893,21 @@ LM_RED:
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 3
     BTFSC   CALC_reg, 2
-    GOTO    RM_RED
+    RETURN
     
     ; Test for the other colours
     CALL    TEST_BLUE
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 3
     BTFSC   CALC_reg, 3
-    GOTO    RM_RED
+    RETURN
 
     ; Test for the other colours
     BSF     CROSS_reg, 3
     BSF	    BLACK_reg, 3  
-
+    
+    RETURN
+    
 RM_RED:
             ; We want to strobe the led and compare to determine if it is white
     CLRF    CALC_reg
@@ -1886,7 +1923,7 @@ RM_RED:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 1
     BTFSC   CALC_reg, 0
-    GOTO    LL_RED
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
@@ -1898,18 +1935,20 @@ RM_RED:
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 1
     BTFSC   CALC_reg, 2
-    GOTO    LL_RED
+    RETURN
 
     ; Test for the other colours
     CALL    TEST_BLUE
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 1
     BTFSC   CALC_reg, 3
-    GOTO    LL_RED
+    RETURN
     
         ; Test for the other colours
     BSF	    CROSS_reg, 1
     BSF	    BLACK_reg, 1 
+    
+    RETURN
     
 LL_RED:
     ;We want to strobe the led and compare to determine if it is white
@@ -1926,7 +1965,7 @@ LL_RED:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 4
     BTFSC   CALC_reg, 0
-    GOTO    RR_RED
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
@@ -1938,19 +1977,21 @@ LL_RED:
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 4
     BTFSC   CALC_reg, 2
-    GOTO    RR_RED
+    RETURN
 
     ; Test for the other colours
     CALL    TEST_BLUE
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 4
     BTFSC   CALC_reg, 3
-    GOTO    RR_RED
+    RETURN
 
     ; Test for the other colours
     BSF	    CROSS_reg, 4
     BSF	    BLACK_reg, 4
-
+    
+    RETURN
+    
 RR_RED:
     ;We want to strobe the led and compare to determine if it is white
     CLRF    CALC_reg
@@ -1966,7 +2007,7 @@ RR_RED:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 0
     BTFSC   CALC_reg, 0
-    GOTO    RESOLUTION_RED 
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
@@ -1978,23 +2019,46 @@ RR_RED:
     BTFSC   CALC_reg, 2
     BSF	    CROSS_reg, 0
     BTFSC   CALC_reg, 2
-    GOTO    RESOLUTION_RED
+    RETURN
 
     ; Test for the other colours
     CALL    TEST_BLUE
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 0
     BTFSC   CALC_reg, 3
-    GOTO    RESOLUTION_RED
+    RETURN
     
         ; Test for the other colours
     BSF	    CROSS_reg, 0
     BSF	    BLACK_reg, 0
+    RETURN
     
 RESOLUTION_RED:
     ; At this point we know that we have not seen the target color - RED
+    BTFSC   prev_mov,0
+    GOTO    case1_1R
+    MOVLW   8
+    CPFSLT  prev_mov
+    GOTO    case2_1R
+    GOTO    case3_1R
     
-    ; Check if all black to stop
+case1_1R:
+    CALL    RR_RED
+    CALL    LL_RED
+    GOTO    startresR
+
+case2_1R:
+    CALL    RM_RED
+    CALL    RR_RED
+    GOTO    startresR
+    
+case3_1R:
+    CALL    LL_RED
+    CALL    LM_RED
+    GOTO    startresR
+
+startresR:
+;    ; Check if all black to stop
     MOVLW   31
     SUBWF   BLACK_reg, 0
     BTFSC   STATUS,0
@@ -2036,7 +2100,33 @@ FOLLOW_GREEN:
     
     CLRF    POS_reg
     CLRF    INDIRECT_reg   
+	
+    CALL MM_GREEN
+     ;STRAIGHT CASE
+    BTFSC   prev_mov,0
+    GOTO    case1G
     
+    ;LEFT CASES
+    MOVLW   8
+    CPFSLT  prev_mov
+    GOTO    case2G
+    ;RIGHT CASES
+    GOTO    case3G
+    
+case1G:
+    CALL   LM_GREEN
+    CALL   RM_GREEN
+    GOTO   RESOLUTION_GREEN
+
+case2G:
+    CALL   LM_GREEN
+    CALL   LL_GREEN
+    GOTO   RESOLUTION_GREEN
+    
+case3G:
+    CALL   RM_GREEN
+    CALL   RR_GREEN
+    GOTO   RESOLUTION_GREEN
 MM_GREEN:
     ; This is the middle sensor for the red color
     CLRF    CALC_reg
@@ -2094,14 +2184,14 @@ LM_GREEN:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 3
     BTFSC   CALC_reg, 0
-    GOTO    RM_GREEN
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF	    CROSS_reg, 3
     BTFSC   CALC_reg, 1
-    GOTO    RM_GREEN
+    RETURN
 
     ; Test for the other colours
     CALL    TEST_GREEN
@@ -2113,7 +2203,7 @@ LM_GREEN:
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 3
     BTFSC   CALC_reg, 3
-    GOTO    RM_GREEN
+    RETURN
 
         ; Test for the other colours
     BSF	    CROSS_reg, 3
@@ -2135,14 +2225,14 @@ RM_GREEN:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 1
     BTFSC   CALC_reg, 0
-    GOTO    LL_GREEN
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF	    CROSS_reg, 1
     BTFSC   CALC_reg, 1
-    GOTO    LL_GREEN
+    RETURN
     
     ; Test for the other colours
     CALL    TEST_GREEN
@@ -2154,7 +2244,7 @@ RM_GREEN:
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 1
     BTFSC   CALC_reg, 3
-    GOTO    LL_GREEN
+    RETURN
     
         ; Test for the other colours
     BSF	    CROSS_reg, 1
@@ -2176,14 +2266,14 @@ LL_GREEN:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 4
     BTFSC   CALC_reg, 0
-    GOTO    RR_GREEN
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF	    CROSS_reg, 4
     BTFSC   CALC_reg, 1
-    GOTO    RR_GREEN
+    RETURN
 
     ; Test for the other colours
     CALL    TEST_GREEN
@@ -2195,7 +2285,7 @@ LL_GREEN:
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 4
     BTFSC   CALC_reg, 3
-    GOTO    RR_GREEN
+    RETURN
 
     ; Test for the other colours
     BSF	    CROSS_reg, 4
@@ -2217,14 +2307,14 @@ RR_GREEN:
     BTFSC   CALC_reg, 0
     BSF	    WHITE_reg, 0
     BTFSC   CALC_reg, 0
-    GOTO    RESOLUTION_GREEN 
+    RETURN
     
     ; Test the sensor for a color and store the result in the register
     CALL    TEST_RED
     BTFSC   CALC_reg, 1
     BSF	    CROSS_reg, 0
     BTFSC   CALC_reg, 1
-    GOTO    RESOLUTION_GREEN
+    RETURN
 
     ; Test for the other colours
     CALL    TEST_GREEN
@@ -2236,14 +2326,36 @@ RR_GREEN:
     BTFSC   CALC_reg, 3
     BSF	    CROSS_reg, 0
     BTFSC   CALC_reg, 3
-    GOTO    RESOLUTION_GREEN
+    RETURN
         ; Test for the other colours
     BSF	    CROSS_reg, 0
     BSF	    BLACK_reg, 0
     
 RESOLUTION_GREEN:
     ; At this point we know that we have not seen the target color - RED
+    BTFSC   prev_mov,0
+    GOTO    case1_1G
+    MOVLW   8
+    CPFSLT  prev_mov
+    GOTO    case2_1G
+    GOTO    case3_1G
     
+case1_1G:
+    CALL    RR_GREEN
+    CALL    LL_GREEN
+    GOTO    startresG
+
+case2_1G:
+    CALL    RM_GREEN
+    CALL    RR_GREEN
+    GOTO    startresG
+    
+case3_1G:
+    CALL    LL_GREEN
+    CALL    LM_GREEN
+    GOTO    startresG
+
+ startresG:
     ; Check if all black to stop
     MOVLW   31
     SUBWF   BLACK_reg, 0
@@ -2343,9 +2455,6 @@ OUT_LEFT:
     GOTO    LLI
 
 STRAIGHT:
-    
-    BTFSC   prev_mov, 0
-    GOTO    HANDLE_STR
     
     CLRF    prev_mov
     BSF	    prev_mov,0
